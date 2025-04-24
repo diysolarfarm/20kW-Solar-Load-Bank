@@ -6,8 +6,11 @@ Today we kick off a three-part build where I turn four 4.5 kW water-heater eleme
 
 Episode roadmap
 1️⃣ Concept & parts haul – heater math, safety rules, un-boxing SSR-60-DA monsters
+
 2️⃣ Control electronics – zero-cross detector, burst-fire code, current logging on an Arduino UNO
+
 3️⃣ Mechanical build – submerged elements, fan-cooled heat-sinks, 100 A breaker panel
+
 4️⃣ Full-power torture test – 20 kW soak, live data, thermal cam footage, results!
 
 What you’ll learn
