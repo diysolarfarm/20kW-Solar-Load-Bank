@@ -1,0 +1,42 @@
+/*
+  Simple Burst-Fire Control for a Zero-Cross SSR
+  ------------------------------------------------
+  Maps a 10k pot (0-5 V) to 0-20 AC cycles ON inside a 20-cycle window.
+  On 60 Hz mains that equals 0-100 % power in 0 … 333 ms steps.
+  Author: ED's DIY Solar Farming
+*/
+
+const byte SSR_PIN = 9;      // SSR input through 220 Ω
+const byte POT_PIN = A0;     // 10 kΩ pot wiper
+const byte CYCLES_PER_WINDOW = 20;   // 20 cycles ≈ 0.333 s @ 60 Hz
+const unsigned long FULL_CYCLE_MS = 17; // 16.67 ms rounded for delay()
+
+void setup() {
+  pinMode(SSR_PIN, OUTPUT);
+  digitalWrite(SSR_PIN, LOW);
+  Serial.begin(9600);
+}
+
+void loop() {
+  // 1. Read pot and convert to 0-20 cycles to turn ON
+  int potRaw = analogRead(POT_PIN);            // 0-1023
+  byte onCycles = map(potRaw, 0, 1023, 0, CYCLES_PER_WINDOW);
+
+  // 2. Fire SSR for 'onCycles' cycles, then keep it off for the rest
+  for (byte i = 0; i < CYCLES_PER_WINDOW; i++) {
+    if (i < onCycles) {
+      digitalWrite(SSR_PIN, HIGH);             // SSR ON
+    } else {
+      digitalWrite(SSR_PIN, LOW);              // SSR OFF
+    }
+    delay(FULL_CYCLE_MS);                      // wait 1 AC cycle
+  }
+
+  // (Optional) Serial output once per 0.33 s window
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint > 1000) {           // print 3×/s
+    Serial.print("Pot = "); Serial.print(potRaw);
+    Serial.print("  Duty = "); Serial.print(onCycles * 5); Serial.println("%");
+    lastPrint = millis();
+  }
+}
