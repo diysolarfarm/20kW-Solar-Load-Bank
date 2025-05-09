@@ -1,42 +1,56 @@
 /*
-  Simple Burst-Fire Control for a Zero-Cross SSR
-  ------------------------------------------------
-  Maps a 10k pot (0-5 V) to 0-20 AC cycles ON inside a 20-cycle window.
-  On 60 Hz mains that equals 0-100 % power in 0 … 333 ms steps.
+  Burst‑Fire with 1 % Dither, plus a VISUAL debug LED
+  Works on 60 Hz mains: 20 cycles ≈ 333 ms
   Author: ED's DIY Solar Farming
 */
 
-const byte SSR_PIN = 9;      // SSR input through 220 Ω
-const byte POT_PIN = A0;     // 10 kΩ pot wiper
-const byte CYCLES_PER_WINDOW = 20;   // 20 cycles ≈ 0.333 s @ 60 Hz
-const unsigned long FULL_CYCLE_MS = 17; // 16.67 ms rounded for delay()
+const byte SSR_PIN   = 9;        // Output to zero‑cross SSR
+const byte DBG_PIN   = 13;       // Built‑in LED flashes once per window
+const byte POT_PIN   = A0;       // 10 kΩ pot
+const byte CYCLES    = 20;       // cycles per window
+const uint16_t FULL_SCALE = 1000; // thousandths for Bresenham math
+
+const unsigned long CYCLE_MS = 17; // 16.67 rounded
+
+uint16_t errorAcc = 0;   // Bresenham accumulator (0‑999)
 
 void setup() {
   pinMode(SSR_PIN, OUTPUT);
+  pinMode(DBG_PIN, OUTPUT);
   digitalWrite(SSR_PIN, LOW);
   Serial.begin(9600);
 }
 
 void loop() {
-  // 1. Read pot and convert to 0-20 cycles to turn ON
-  int potRaw = analogRead(POT_PIN);            // 0-1023
-  byte onCycles = map(potRaw, 0, 1023, 0, CYCLES_PER_WINDOW);
+  // ---------- 1. Read pot and translate to 0–999 (≈0–100 %)
+  uint16_t target = analogRead(POT_PIN) * FULL_SCALE / 1023; // 0‑999
 
-  // 2. Fire SSR for 'onCycles' cycles, then keep it off for the rest
-  for (byte i = 0; i < CYCLES_PER_WINDOW; i++) {
-    if (i < onCycles) {
-      digitalWrite(SSR_PIN, HIGH);             // SSR ON
-    } else {
-      digitalWrite(SSR_PIN, LOW);              // SSR OFF
-    }
-    delay(FULL_CYCLE_MS);                      // wait 1 AC cycle
+  // ---------- 2. Bresenham accumulator determines ON cycles this window
+  errorAcc += target;                // add desired "thousandths"
+  if (errorAcc >= FULL_SCALE)        // have we earned an extra cycle?
+    errorAcc -= FULL_SCALE;          // keep remainder for next time
+  // dutyFrac = target /1000; so desired cycles = duty * 20
+  uint8_t desiredCycles = (uint32_t)target * CYCLES / FULL_SCALE; // 0‑20
+  // dithering: occasionally add 1 more cycle when remainder rolls over
+  uint8_t onCycles = desiredCycles + (errorAcc < target ? 1 : 0);
+
+  // ---------- 3. Visual heartbeat
+  digitalWrite(DBG_PIN, HIGH);       // LED on at start of each window
+
+  // ---------- 4. Run the 20‑cycle window
+  for (uint8_t c = 0; c < CYCLES; c++) {
+    digitalWrite(SSR_PIN, (c < onCycles)); // HIGH for “on” cycles
+    delay(CYCLE_MS);
   }
 
-  // (Optional) Serial output once per 0.33 s window
+  digitalWrite(DBG_PIN, LOW);        // LED off at end of window
+
+  // ---------- 5. Optional serial debug every 1 s
   static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 1000) {           // print 3×/s
-    Serial.print("Pot = "); Serial.print(potRaw);
-    Serial.print("  Duty = "); Serial.print(onCycles * 5); Serial.println("%");
+  if (millis() - lastPrint > 1000) {
+    Serial.print("Pot raw: "); Serial.print(analogRead(POT_PIN));
+    Serial.print("  Duty %: "); Serial.print(target / 10.0, 1);
+    Serial.print("  This window ON cycles: "); Serial.println(onCycles);
     lastPrint = millis();
   }
 }
